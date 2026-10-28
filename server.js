@@ -17,24 +17,43 @@ const chatRoutes = require("./routes/chatRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 
 const app = express();
+const configuredOrigins = (process.env.CLIENT_URLS || process.env.CLIENT_URL || "")
+  .split(",")
+  .map((value) => {
+    const trimmedValue = value.trim();
+    try {
+      return new URL(trimmedValue).origin;
+    } catch {
+      return trimmedValue;
+    }
+  })
+  .filter(Boolean);
 const allowedOrigins = new Set([
   "http://localhost:5173",
-  "https://math-mind-ai-five.vercel.app",
-  ...(process.env.CLIENT_URLS || process.env.CLIENT_URL || "")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean),
+
+  "https://mathmind-ai-client.vercel.app",
+  ...configuredOrigins,
 ]);
+
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  if (allowedOrigins.has(origin)) return true;
+  // Automatically allow any vercel deployment preview or domain
+  if (/^https:\/\/[a-z0-9-]+(\.vercel\.app)$/i.test(origin) || origin.endsWith(".vercel.app")) {
+    return true;
+  }
+  return false;
+};
 
 // Middleware
 app.use(
   cors({
-    origin: (origin, callback) => callback(null, !origin || allowedOrigins.has(origin)),
+    origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),
     credentials: true,
   })
 );
 
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
 // Routes
 app.use("/api/auth", authRoutes);
@@ -70,9 +89,14 @@ const startServer = async () => {
   await connectDB();
   await ensureQuestionIndexes();
 
-  app.listen(PORT, () => {
+  return app.listen(PORT, () => {
     console.log(`MathMind AI server running on port ${PORT}`);
   });
 };
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = app;
+module.exports.startServer = startServer;
